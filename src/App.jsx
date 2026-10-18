@@ -1,4 +1,5 @@
-import {useState} from "react";
+import {useEffect,useState} from "react";
+import { getCurrentWeather } from "./api/weatherApi";
 import "./App.css";
 
 //path for the icons & images
@@ -66,6 +67,13 @@ const weatherData = {
 
 
 function App() {
+//test api with console log
+  useEffect(() => {
+  getCurrentWeather().catch((error) => {
+    console.error("API error:", error);
+  });
+}, []);
+
 
     //Search State
     const [searchQuery, setSearchQuery] = useState("");
