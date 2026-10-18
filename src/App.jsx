@@ -67,11 +67,42 @@ const weatherData = {
 
 
 function App() {
-//test api with console log
+/*test api with console log
   useEffect(() => {
   getCurrentWeather().catch((error) => {
     console.error("API error:", error);
   });
+}, []); */
+
+
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadWeather() {
+    try {
+      const data = await getCurrentWeather(52.52, 13.41);
+
+      if (cancelled) return;
+
+      const realTemperature = data.current.temperature_2m;
+
+      setWeather((previousWeather) => ({
+        ...previousWeather,
+        temperature: realTemperature,
+      }));
+    } catch (error) {
+      if (!cancelled) {
+        console.error("Failed to fetch weather:", error);
+        setError("Unable to load the current temperature.");
+      }
+    }
+  }
+
+  loadWeather();
+
+  return () => {
+    cancelled = true;
+  };
 }, []);
 
 
