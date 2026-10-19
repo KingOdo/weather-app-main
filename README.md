@@ -1,16 +1,140 @@
-# React + Vite
+# ☀️ Weather Now
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A responsive, real-time weather application built with **React.js and Vite**, powered by the **Open-Meteo Weather and Geocoding APIs**.
 
-Currently, two official plugins are available:
+Weather Now allows users to search for locations worldwide and view current weather conditions, hourly forecasts, and 7-day forecasts through a clean, interactive interface.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🌤️ Features
 
-## React Compiler
+- **Worldwide Location Search:** Search for cities and locations worldwide with live autocomplete suggestions.
+- **Current Weather:** View temperature, feels-like temperature, humidity, wind speed, and precipitation.
+- **7-Day Forecast:** Check daily weather conditions with maximum and minimum temperatures.
+- **Hourly Forecast:** Explore hourly weather predictions for selected days.
+- **Customizable Units:** Switch between Celsius and Fahrenheit, km/h and mph, and millimeters and inches.
+- **Responsive Design:** Optimized for desktop, tablet, and mobile devices.
+- **Dynamic Weather Icons:** Displays weather illustrations based on actual weather conditions.
+- **Loading and Error States:** Includes loading animations, error handling, and retry functionality.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🛠️ Technologies Used
 
-## Expanding the ESLint configuration
+| Technology | Purpose |
+|---|---|
+| React.js | Frontend development and state management |
+| JavaScript (ES6+) | Application logic and API integration |
+| Vite | Development environment and production builds |
+| HTML5 | Application structure |
+| CSS3 | Responsive layouts and styling |
+| Open-Meteo Forecast API | Current weather and forecast data |
+| Open-Meteo Geocoding API | Worldwide location search |
+| Git & GitHub | Version control |
+| Vercel | Deployment |
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 🔗 API Integration
+
+Weather Now uses two Open-Meteo APIs.
+
+### 1. Geocoding API
+
+Converts location names into geographic coordinates (latitude and longitude).
+
+**Endpoint:**
+
+`https://geocoding-api.open-meteo.com/v1/search`
+
+### 2. Weather Forecast API
+
+Retrieves current weather conditions, hourly forecasts, and daily forecasts using the selected location's coordinates.
+
+**Endpoint:**
+
+`https://api.open-meteo.com/v1/forecast`
+
+### How It Works
+
+1. A user enters a location in the search bar.
+2. The Geocoding API returns matching locations.
+3. The user selects a location.
+4. The Forecast API retrieves weather information using its coordinates.
+5. The application processes the API response and updates the interface.
+
+The project uses `fetch()`, `async/await`, React hooks, and reusable JavaScript functions for API communication and data transformation.
+
+## 📂 Project Structure
+
+```text
+weather-app-main/
+├── public/
+│   └── assets/
+│       └── images/
+├── src/
+│   ├── api/
+│   │   ├── geocodingApi.js
+│   │   └── weatherApi.js
+│   ├── utils/
+│   │   └── weatherUtils.js
+│   ├── App.jsx
+│   ├── App.css
+│   ├── index.css
+│   └── main.jsx
+├── index.html
+├── package.json
+└── README.md
+```
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js (a version supported by the project's Vite release)
+- npm
+- Git
+
+### Installation
+
+**1. Clone the repository**
+
+```bash
+git clone https://github.com/YOUR-USERNAME/YOUR-REPOSITORY.git
+```
+
+**2. Navigate to the project directory**
+
+```bash
+cd YOUR-REPOSITORY
+```
+
+**3. Install dependencies**
+
+```bash
+npm install
+```
+
+**4. Start the development server**
+
+```bash
+npm run dev
+```
+
+Open the local URL displayed in your terminal, usually:
+
+`http://localhost:5173/`
+
+### Production Build
+
+```bash
+npm run build
+```
+
+To preview the production build locally:
+
+```bash
+npm run preview
+```
+
+## 📚 What I Learned
+
+I built Weather Now as a practical project to strengthen my understanding of React and working with external APIs.
+
+Through this project, I explored
+
+
