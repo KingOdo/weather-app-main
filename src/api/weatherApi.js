@@ -1,5 +1,6 @@
 
 const API_URL = "https://api.open-meteo.com/v1/forecast";
+//const API_URL = "https://api.open-meteo.com/invalid-endpoint";
 
 export async function getCurrentWeather(latitude, longitude) {
   const params = new URLSearchParams({

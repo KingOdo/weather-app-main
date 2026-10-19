@@ -21,6 +21,8 @@ const images = {
   dropdown: `${imagePath}icon-dropdown.svg`,
   checkmark: `${imagePath}icon-checkmark.svg`,
   loading: `${imagePath}icon-loading.svg`,
+  error: `${imagePath}icon-error.svg`,
+  retry: `${imagePath}icon-retry.svg`,
 };
 
 // Starting location only. Search results now come from geocoding.
@@ -71,7 +73,7 @@ function App() {
 
   const [hasLoadedWeather, setHasLoadedWeather] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  
+
   // Identify newer requests, so an older search cannot overwrite them.
   const requestId = useRef(0);
 
@@ -80,27 +82,55 @@ function App() {
     let cancelled = false;
 
     async function loadBerlin() {
-      try {
-        const data = await getCurrentWeather(defaultLocation.latitude, defaultLocation.longitude);
-        const result = transformWeatherData(data, locationLabel(defaultLocation));
-        if (cancelled || id !== requestId.current) return;
+    setLoading(true);
+    setError("");
 
-        setWeather(result);
-        setSelectedDay(result.daily[0]?.date ?? "");
-      } catch (err) {
-        if (cancelled || id !== requestId.current) return;
-        console.error("Weather API error:", err);
-        setError("Unable to load weather data. Please refresh and try again.");
-      } finally {
-        if (!cancelled && id === requestId.current) setLoading(false);
+    try {
+      const data = await getCurrentWeather(
+        defaultLocation.latitude,
+        defaultLocation.longitude
+      );
+
+      const result = transformWeatherData(
+        data,
+        locationLabel(defaultLocation)
+      );
+
+      if (cancelled || id !== requestId.current) return;
+
+      setWeather(result);
+      setSelectedDay(result.daily[0]?.date ?? "");
+      setHasLoadedWeather(true);
+    } catch (err) {
+      if (cancelled || id !== requestId.current) return;
+
+      console.error("Weather API error:", err);
+      setError(
+        "We couldn't connect to the server (API error). Please try again in a few moments."
+      );
+    } finally {
+      if (!cancelled && id === requestId.current) {
+        setLoading(false);
       }
     }
+  }
 
-    loadBerlin();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  loadBerlin();
+
+  
+  return () => {
+    cancelled = true;
+  };
+}, [retryCount]);
+
+
+function handleRetry() {
+  if (loading) return;
+
+  setError("");
+  setRetryCount((count) => count + 1);
+}
+
 
   const convertTemperature = (value) =>
     temperatureUnit === "F"
@@ -183,7 +213,7 @@ function App() {
       setWeather(result);
       setSelectedDay(result.daily[0]?.date ?? "");
       setSearchQuery(locationLabel(location));
-      setSelectedLocation(location);
+      setHasLoadedWeather(true);
     } catch (err) {
       if (id !== requestId.current) return;
       console.error("Weather search error:", err);
@@ -298,7 +328,32 @@ function App() {
         </div>
       </header>
 
-      <main>
+  
+        {!loading && error && !hasLoadedWeather ? (
+  <main className="api-error-page" role="alert">
+    <img
+      src={images.error}
+      alt=""
+      className="api-error-icon"
+    />
+
+    <h1>Something went wrong</h1>
+
+    <p>{error}</p>
+
+    <button
+      type="button"
+      className="retry-button"
+      onClick={handleRetry}
+    >
+      <img src={images.retry} alt="" />
+      <span>Retry</span>
+    </button>
+  </main>
+) : (
+  <main>
+
+
         <h1 className="page-title">How’s the sky looking today?</h1>
 
         <div className="search-section">
@@ -478,6 +533,7 @@ function App() {
           </aside>
         </div>
       </main>
+)}
     </div>
   );
 }

@@ -695,3 +695,75 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/*Error State designs*/
+
+/* API error screen */
+
+.api-error-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  min-height: 70vh;
+  padding: 100px 20px 40px;
+  text-align: center;
+}
+
+.api-error-icon {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.api-error-page h1 {
+  font-family: var(--font-heading);
+  font-size: clamp(34px, 5vw, 52px);
+  line-height: 1.15;
+}
+
+.api-error-page p {
+  max-width: 540px;
+  color: var(--neutral-200);
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.retry-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 9px;
+  background: var(--neutral-800);
+  color: var(--neutral-0);
+  font-size: 16px;
+  transition: background-color 0.2s ease;
+}
+
+.retry-button:hover {
+  background: var(--neutral-700);
+}
+
+.retry-button img {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 600px) {
+  .api-error-page {
+    padding-top: 90px;
+    gap: 20px;
+  }
+
+  .api-error-page h1 {
+    font-size: 36px;
+  }
+
+  .api-error-page p {
+    font-size: 16px;
+  }
+}
