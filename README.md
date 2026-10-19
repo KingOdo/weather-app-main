@@ -59,27 +59,6 @@ Retrieves current weather conditions, hourly forecasts, and daily forecasts usin
 
 The project uses `fetch()`, `async/await`, React hooks, and reusable JavaScript functions for API communication and data transformation.
 
-## 📂 Project Structure
-
-```text
-weather-app-main/
-├── public/
-│   └── assets/
-│       └── images/
-├── src/
-│   ├── api/
-│   │   ├── geocodingApi.js
-│   │   └── weatherApi.js
-│   ├── utils/
-│   │   └── weatherUtils.js
-│   ├── App.jsx
-│   ├── App.css
-│   ├── index.css
-│   └── main.jsx
-├── index.html
-├── package.json
-└── README.md
-```
 
 ## 🚀 Getting Started
 
@@ -133,8 +112,6 @@ npm run preview
 
 ## 📚 What I Learned
 
-I built Weather Now as a practical project to strengthen my understanding of React and working with external APIs.
-
-Through this project, I explored
+I built Weather Now as a practical project to strengthen my understanding on external APIs.
 
 
