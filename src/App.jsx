@@ -1,10 +1,11 @@
-import {useEffect,useState} from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCurrentWeather } from "./api/weatherApi";
+import { searchLocations } from "./api/geocodingApi";
+import { transformWeatherData } from "./utils/weatherUtils";
 import "./App.css";
 
-//path for the icons & images
+// These files should be in public/assets/images/.
 const imagePath = "/assets/images/";
-
 const images = {
   logo: `${imagePath}logo.svg`,
   sunny: `${imagePath}icon-sunny.webp`,
@@ -22,208 +23,195 @@ const images = {
   loading: `${imagePath}icon-loading.svg`,
 };
 
-//demonstration data, replace with API data in the future
-const cities = [
-  "Berlin, Germany",
-  "Monrovia, Liberia",
-  "Lagos, Nigeria",
-  "London, United Kingdom",
-  "New York, United States",
-  "Tokyo, Japan",
-  "Paris, France",
-];
+// Starting location only. Search results now come from geocoding.
+const defaultLocation = {
+  name: "Berlin",
+  country: "Germany",
+  latitude: 52.52,
+  longitude: 13.41,
+};
 
-const weatherData = {
+function locationLabel(place) {
+  return [place.name, place.admin1, place.country]
+    .filter(Boolean)
+    .filter((part, index, parts) => parts.indexOf(part) === index)
+    .join(", ");
+}
+
+const initialWeather = {
   city: "Berlin, Germany",
-  date: "Tuesday, Aug 5, 2025",
+  date: "Loading current weather...",
   temperature: 20,
   condition: "sunny",
   feelsLike: 18,
   humidity: 46,
   wind: 14,
   precipitation: 0,
-
-  daily: [
-    { day: "Tue", icon: "rainy", high: 20, low: 14 },
-    { day: "Wed", icon: "drizzle", high: 21, low: 15 },
-    { day: "Thu", icon: "sunny", high: 24, low: 14 },
-    { day: "Fri", icon: "partlyCloudy", high: 25, low: 13 },
-    { day: "Sat", icon: "storm", high: 21, low: 15 },
-    { day: "Sun", icon: "snow", high: 25, low: 16 },
-    { day: "Mon", icon: "fog", high: 24, low: 15 },
-  ],
-
-  hourly: [
-    { time: "3 PM", icon: "cloudy", temperature: 20 },
-    { time: "4 PM", icon: "partlyCloudy", temperature: 20 },
-    { time: "5 PM", icon: "sunny", temperature: 20 },
-    { time: "6 PM", icon: "cloudy", temperature: 19 },
-    { time: "7 PM", icon: "snow", temperature: 18 },
-    { time: "8 PM", icon: "fog", temperature: 18 },
-    { time: "9 PM", icon: "rainy", temperature: 17 },
-    { time: "10 PM", icon: "cloudy", temperature: 17 },
-  ],
+  daily: [],
+  hourlyByDate: {},
 };
 
-
 function App() {
-/*test api with console log
+  // All state is declared before effects that use its setters.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [searchingLocations, setSearchingLocations] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [weather, setWeather] = useState(initialWeather);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [unitsOpen, setUnitsOpen] = useState(false);
+  const [daysOpen, setDaysOpen] = useState(false);
+  const [temperatureUnit, setTemperatureUnit] = useState("C");
+  const [windUnit, setWindUnit] = useState("km/h");
+  const [precipitationUnit, setPrecipitationUnit] = useState("mm");
+  const [selectedDay, setSelectedDay] = useState("");
+
+  const [hasLoadedWeather, setHasLoadedWeather] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  
+  // Identify newer requests, so an older search cannot overwrite them.
+  const requestId = useRef(0);
+
   useEffect(() => {
-  getCurrentWeather().catch((error) => {
-    console.error("API error:", error);
-  });
-}, []); */
+    const id = ++requestId.current;
+    let cancelled = false;
 
+    async function loadBerlin() {
+      try {
+        const data = await getCurrentWeather(defaultLocation.latitude, defaultLocation.longitude);
+        const result = transformWeatherData(data, locationLabel(defaultLocation));
+        if (cancelled || id !== requestId.current) return;
 
-useEffect(() => {
-  let cancelled = false;
-
-  async function loadWeather() {
-    try {
-      const data = await getCurrentWeather(52.52, 13.41);
-
-      if (cancelled) return;
-
-      const realTemperature = data.current.temperature_2m;
-
-      setWeather((previousWeather) => ({
-        ...previousWeather,
-        temperature: realTemperature,
-      }));
-    } catch (error) {
-      if (!cancelled) {
-        console.error("Failed to fetch weather:", error);
-        setError("Unable to load the current temperature.");
+        setWeather(result);
+        setSelectedDay(result.daily[0]?.date ?? "");
+      } catch (err) {
+        if (cancelled || id !== requestId.current) return;
+        console.error("Weather API error:", err);
+        setError("Unable to load weather data. Please refresh and try again.");
+      } finally {
+        if (!cancelled && id === requestId.current) setLoading(false);
       }
+    }
+
+    loadBerlin();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const convertTemperature = (value) =>
+    temperatureUnit === "F"
+      ? Math.round((value * 9) / 5 + 32)
+      : Math.round(value);
+
+  const convertWind = (value) =>
+    windUnit === "mph" ? Math.round(value * 0.621371) : Math.round(value);
+
+  const convertPrecipitation = (value) =>
+    precipitationUnit === "in" ? (value / 25.4).toFixed(1) : value;
+
+  function switchUnits(system) {
+    const imperial = system === "imperial";
+    setTemperatureUnit(imperial ? "F" : "C");
+    setWindUnit(imperial ? "mph" : "km/h");
+    setPrecipitationUnit(imperial ? "in" : "mm");
+  }
+
+  // Search the worldwide place index only after typing pauses.
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (query.length < 2 || !showSuggestions || selectedLocation) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearchingLocations(true);
+      setSearchError("");
+      try {
+        const places = await searchLocations(query, controller.signal);
+        if (!controller.signal.aborted) setSuggestions(places);
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          console.error("Geocoding error:", err);
+          setSuggestions([]);
+          setSearchError("Could not search places. Try again.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setSearchingLocations(false);
+      }
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery, showSuggestions, selectedLocation]);
+
+  async function handleSearch(event) {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      setError("Enter at least two characters for a place.");
+      return;
+    }
+
+    // The chosen suggestion is the most accurate result. Otherwise,
+    // resolve typed text on submission (e.g. pressing Enter).
+    const id = ++requestId.current;
+    setLoading(true);
+    setError("");
+    setShowSuggestions(false);
+    setUnitsOpen(false);
+    setDaysOpen(false);
+
+    try {
+      const matches = selectedLocation
+        ? [selectedLocation]
+        : await searchLocations(query);
+      if (id !== requestId.current) return;
+      if (!matches.length) {
+        setError("No matching place found. Try adding a country name.");
+        return;
+      }
+      const location = matches[0];
+      const data = await getCurrentWeather(location.latitude, location.longitude);
+      const result = transformWeatherData(data, locationLabel(location));
+      if (id !== requestId.current) return;
+
+      setWeather(result);
+      setSelectedDay(result.daily[0]?.date ?? "");
+      setSearchQuery(locationLabel(location));
+      setSelectedLocation(location);
+    } catch (err) {
+      if (id !== requestId.current) return;
+      console.error("Weather search error:", err);
+      setError("Unable to load that location. Please try again.");
+    } finally {
+      if (id === requestId.current) setLoading(false);
     }
   }
 
-  loadWeather();
-
-  return () => {
-    cancelled = true;
-  };
-}, []);
-
-
-    //Search State
-    const [searchQuery, setSearchQuery] = useState("");
-    const [showSuggestions, setShowSuggestions] = useState(false);
-
-    //Weather State
-    const [weather, setWeather] = useState(weatherData);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
-
-
-    //dropdown optionn state
-    const [unitsOpen, setUnitsOpen] = useState(false);
-    const [daysOpen, setDaysOpen] = useState(false);
-
-    //Units
-    const [temperatureUnit, setTemperatureUnit] = useState("C");
-    const [windUnit, setWindUnit] = useState("km/h");
-    const [precipitationUnit, setPrecipitationUnit] = useState("mm");
-
-    //selected forcast days
-    const [selectedDay, setSelectedDay] = useState(true);
-
-//We create some helper functions to aid in conversions
-const convertTemperature = (temperature) => {
-  if (temperatureUnit === "F") {
-    return Math.round((temperature * 9) / 5 + 32);
-}
-      return Math.round(temperature);
-};
-
-const windSpeedConversion = (speed) => {
-  if (windUnit === "mph") {
-    return Math.round(speed * 0.621371);
-
-  }
-    return Math.round(speed); 
-};
-
-const convertPrecipitation = (amount) => {
-  if (precipitationUnit === "in") {
-    return (amount / 25.4).toFixed(1);
-  }
-
-  return amount;
-};
-const switchUnits = (system) => {
-  if (system === "imperial") {
-    setTemperatureUnit("F");
-    setWindUnit("mph");
-    setPrecipitationUnit("in");
-  } else {
-    setTemperatureUnit("C");
-    setWindUnit("km/h");
-    setPrecipitationUnit("mm");
-  }
-};
-
-
-
-  //search functions
-  const filteredCities = searchQuery.trim()
-    ? cities.filter((city) =>
-        city.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : [];
-    const handleSearch = (e) => {
-      e.preventDefault();
-
-      const city= searchQuery.trim();
-
-      if(!city){
-        setError("Please enter a city name.");
-        return;
-      }
-
-      const selectedCity = cities.find((item) => item.toLowerCase() === city.toLowerCase());
-      if(!selectedCity){
-        setError("City not found. Please try again.");
-        setShowSuggestions(false);
-        return;
-      }
-      setError("");
-      setLoading(true);
-      setShowSuggestions(false);
-      setUnitsOpen(false);
-      setDaysOpen(false);
-
-      //generate random data and replace with API requests later
-
-        setTimeout(() => {
-      setWeather({
-        ...weatherData,
-        city: selectedCity,
-      });
-
-      setSelectedDay("Tue");
-      setLoading(false);
-    }, 1200);
-  };
-
-  const selectCity = (city) => {
-    setSearchQuery(city);
+  function selectCity(place) {
+    setSelectedLocation(place);
+    setSearchQuery(locationLabel(place));
+    setSuggestions([]);
     setShowSuggestions(false);
+    setSearchError("");
     setError("");
-  };
+  }
 
+  const selectedDayLabel =
+    weather.daily.find((day) => day.date === selectedDay)?.day ??
+    weather.daily[0]?.day ??
+    "—";
+  const hourlyForecast = weather.hourlyByDate[selectedDay] ?? [];
 
-  //component build
   return (
-     <div className="weather-app">
-      {/* HEADER */}
-
+    <div className="weather-app">
       <header className="app-header">
-        <img
-          src={images.logo}
-          alt="Weather Now"
-          className="app-logo"
-        />
+        <img src={images.logo} alt="Weather Now" className="app-logo" />
 
         <div className="units-container">
           <button
@@ -231,7 +219,7 @@ const switchUnits = (system) => {
             className="units-button"
             aria-expanded={unitsOpen}
             onClick={() => {
-              setUnitsOpen(!unitsOpen);
+              setUnitsOpen((open) => !open);
               setDaysOpen(false);
             }}
           >
@@ -246,113 +234,77 @@ const switchUnits = (system) => {
                 type="button"
                 className="switch-units"
                 onClick={() =>
-                  switchUnits(
-                    temperatureUnit === "C"
-                      ? "imperial"
-                      : "metric"
-                  )
+                  switchUnits(temperatureUnit === "C" ? "imperial" : "metric")
                 }
               >
-                Switch to{" "}
-                {temperatureUnit === "C"
-                  ? "Imperial"
-                  : "Metric"}
+                Switch to {temperatureUnit === "C" ? "Imperial" : "Metric"}
               </button>
 
               <div className="units-group">
                 <p className="units-label">Temperature</p>
-
-                <button
-                  type="button"
-                  onClick={() => setTemperatureUnit("C")}
-                >
-                  Celsius (°C)
-                  {temperatureUnit === "C" && (
-                    <img src={images.checkmark} alt="Selected" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setTemperatureUnit("F")}
-                >
-                  Fahrenheit (°F)
-                  {temperatureUnit === "F" && (
-                    <img src={images.checkmark} alt="Selected" />
-                  )}
-                </button>
+                {[
+                  { label: "Celsius (°C)", value: "C" },
+                  { label: "Fahrenheit (°F)", value: "F" },
+                ].map((unit) => (
+                  <button
+                    type="button"
+                    key={unit.value}
+                    onClick={() => setTemperatureUnit(unit.value)}
+                  >
+                    {unit.label}
+                    {temperatureUnit === unit.value && (
+                      <img src={images.checkmark} alt="Selected" />
+                    )}
+                  </button>
+                ))}
               </div>
 
               <div className="units-group">
                 <p className="units-label">Wind Speed</p>
-
-                <button
-                  type="button"
-                  onClick={() => setWindUnit("km/h")}
-                >
-                  km/h
-                  {windUnit === "km/h" && (
-                    <img src={images.checkmark} alt="Selected" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setWindUnit("mph")}
-                >
-                  mph
-                  {windUnit === "mph" && (
-                    <img src={images.checkmark} alt="Selected" />
-                  )}
-                </button>
+                {["km/h", "mph"].map((unit) => (
+                  <button
+                    type="button"
+                    key={unit}
+                    onClick={() => setWindUnit(unit)}
+                  >
+                    {unit}
+                    {windUnit === unit && (
+                      <img src={images.checkmark} alt="Selected" />
+                    )}
+                  </button>
+                ))}
               </div>
 
               <div className="units-group">
                 <p className="units-label">Precipitation</p>
-
-                <button
-                  type="button"
-                  onClick={() => setPrecipitationUnit("mm")}
-                >
-                  Millimeters (mm)
-                  {precipitationUnit === "mm" && (
-                    <img src={images.checkmark} alt="Selected" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPrecipitationUnit("in")}
-                >
-                  Inches (in)
-                  {precipitationUnit === "in" && (
-                    <img src={images.checkmark} alt="Selected" />
-                  )}
-                </button>
+                {[
+                  { label: "Millimeters (mm)", value: "mm" },
+                  { label: "Inches (in)", value: "in" },
+                ].map((unit) => (
+                  <button
+                    type="button"
+                    key={unit.value}
+                    onClick={() => setPrecipitationUnit(unit.value)}
+                  >
+                    {unit.label}
+                    {precipitationUnit === unit.value && (
+                      <img src={images.checkmark} alt="Selected" />
+                    )}
+                  </button>
+                ))}
               </div>
             </div>
           )}
         </div>
       </header>
 
-      {/* MAIN CONTENT */}
-
       <main>
-        <h1 className="page-title">
-          How’s the sky looking today?
-        </h1>
-
-        {/* SEARCH BAR */}
+        <h1 className="page-title">How’s the sky looking today?</h1>
 
         <div className="search-section">
           <form className="search-bar" onSubmit={handleSearch}>
             <div className="search-input-container">
-              <img
-                src={images.search}
-                alt=""
-                className="search-icon"
-              />
-
+              <img src={images.search} alt="" className="search-icon" />
               <input
                 type="text"
                 value={searchQuery}
@@ -361,46 +313,49 @@ const switchUnits = (system) => {
                 autoComplete="off"
                 onChange={(event) => {
                   setSearchQuery(event.target.value);
+                  setSelectedLocation(null);
+                  setSuggestions([]);
+                  setSearchingLocations(false);
                   setShowSuggestions(true);
+                  setSearchError("");
                   setError("");
                 }}
                 onFocus={() => setShowSuggestions(true)}
                 onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    setShowSuggestions(false);
-                  }
+                  if (event.key === "Escape") setShowSuggestions(false);
                 }}
               />
 
-              {showSuggestions && filteredCities.length > 0 && (
+              {showSuggestions && searchQuery.trim().length >= 2 && !selectedLocation && (
                 <div className="search-suggestions">
-                  {filteredCities.map((city) => (
+                  {searchingLocations && <p className="suggestion-status">Searching places...</p>}
+                  {!searchingLocations && searchError && (
+                    <p className="suggestion-status" role="status">{searchError}</p>
+                  )}
+                  {!searchingLocations && !searchError && suggestions.length === 0 && (
+                    <p className="suggestion-status">No matches yet. Try a city and country.</p>
+                  )}
+                  {!searchingLocations && suggestions.map((place) => (
                     <button
                       type="button"
-                      key={city}
-                      onClick={() => selectCity(city)}
+                      key={place.id ?? `${place.name}-${place.latitude}-${place.longitude}`}
+                      onClick={() => selectCity(place)}
                     >
-                      {city}
+                      {locationLabel(place)}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-
-            <button type="submit" className="search-button">
+            <button type="submit" className="search-button" disabled={loading}>
               Search
             </button>
           </form>
-
           {error && <p className="error-message" role="alert">{error}</p>}
         </div>
 
-        {/* WEATHER CONTENT */}
-
         <div className="weather-layout">
           <section className="weather-main">
-            {/* CURRENT WEATHER */}
-
             <div className="current-weather">
               {loading ? (
                 <div className="weather-loading" role="status">
@@ -413,49 +368,27 @@ const switchUnits = (system) => {
                     <h2>{weather.city}</h2>
                     <p>{weather.date}</p>
                   </div>
-
                   <div className="temperature">
-                    <img
-                      src={images[weather.condition]}
-                      alt={weather.condition}
-                    />
-
-                    <span>
-                      {convertTemperature(weather.temperature)}°
-                    </span>
+                    <img src={images[weather.condition]} alt={weather.condition} />
+                    <span>{convertTemperature(weather.temperature)}°</span>
                   </div>
                 </>
               )}
             </div>
 
-            {/* WEATHER DETAILS */}
-
             <div className="weather-details">
               <div className="detail-card">
                 <p>Feels Like</p>
-                <span>
-                  {loading
-                    ? "—"
-                    : `${convertTemperature(weather.feelsLike)}°`}
-                </span>
+                <span>{loading ? "—" : `${convertTemperature(weather.feelsLike)}°`}</span>
               </div>
-
               <div className="detail-card">
                 <p>Humidity</p>
-                <span>
-                  {loading ? "—" : `${weather.humidity}%`}
-                </span>
+                <span>{loading ? "—" : `${weather.humidity}%`}</span>
               </div>
-
               <div className="detail-card">
                 <p>Wind</p>
-                <span>
-                  {loading
-                    ? "—"
-                    : `${windSpeedConversion(weather.wind)} ${windUnit}`}
-                </span>
+                <span>{loading ? "—" : `${convertWind(weather.wind)} ${windUnit}`}</span>
               </div>
-
               <div className="detail-card">
                 <p>Precipitation</p>
                 <span>
@@ -466,73 +399,56 @@ const switchUnits = (system) => {
               </div>
             </div>
 
-            {/* DAILY FORECAST */}
-
             <section className="daily-section">
               <h3>Daily forecast</h3>
-
               <div className="daily-forecast">
-                {weather.daily.map((day) => (
-                  <div
-                    className={`day-card ${loading ? "skeleton" : ""}`}
-                    key={day.day}
-                  >
-                    {!loading && (
-                      <>
+                {loading
+                  ? Array.from({ length: 7 }, (_, index) => (
+                      <div className="day-card skeleton" key={index} />
+                    ))
+                  : weather.daily.map((day) => (
+                      <div className="day-card" key={day.date}>
                         <p>{day.day}</p>
-
                         <img
                           src={images[day.icon]}
                           alt={`${day.day} weather`}
                           className="forecast-icon"
                         />
-
                         <div className="day-temperatures">
-                          <span>
-                            {convertTemperature(day.high)}°
-                          </span>
-
-                          <span>
-                            {convertTemperature(day.low)}°
-                          </span>
+                          <span>{convertTemperature(day.high)}°</span>
+                          <span>{convertTemperature(day.low)}°</span>
                         </div>
-                      </>
-                    )}
-                  </div>
-                ))}
+                      </div>
+                    ))}
               </div>
             </section>
           </section>
 
-          {/* HOURLY FORECAST */}
-
           <aside className="hourly-forecast">
             <div className="hourly-header">
               <h3>Hourly forecast</h3>
-
               <div className="days-dropdown-container">
                 <button
                   type="button"
                   className="days-button"
                   aria-expanded={daysOpen}
+                  disabled={loading || !weather.daily.length}
                   onClick={() => {
-                    setDaysOpen(!daysOpen);
+                    setDaysOpen((open) => !open);
                     setUnitsOpen(false);
                   }}
                 >
-                  {loading ? "—" : selectedDay}
-
+                  {loading ? "—" : selectedDayLabel}
                   <img src={images.dropdown} alt="" />
                 </button>
-
                 {daysOpen && !loading && (
                   <div className="days-menu">
                     {weather.daily.map((day) => (
                       <button
                         type="button"
-                        key={day.day}
+                        key={day.date}
                         onClick={() => {
-                          setSelectedDay(day.day);
+                          setSelectedDay(day.date);
                           setDaysOpen(false);
                         }}
                       >
@@ -545,29 +461,19 @@ const switchUnits = (system) => {
             </div>
 
             <div className="hourly-list">
-              {weather.hourly.map((hour) => (
-                <div
-                  className={`hour-card ${loading ? "skeleton" : ""}`}
-                  key={hour.time}
-                >
-                  {!loading && (
-                    <>
+              {loading
+                ? Array.from({ length: 8 }, (_, index) => (
+                    <div className="hour-card skeleton" key={index} />
+                  ))
+                : hourlyForecast.map((hour, index) => (
+                    <div className="hour-card" key={`${selectedDay}-${index}`}>
                       <div className="hour-info">
-                        <img
-                          src={images[hour.icon]}
-                          alt=""
-                        />
-
+                        <img src={images[hour.icon]} alt="" />
                         <span>{hour.time}</span>
                       </div>
-
-                      <span>
-                        {convertTemperature(hour.temperature)}°
-                      </span>
-                    </>
-                  )}
-                </div>
-              ))}
+                      <span>{convertTemperature(hour.temperature)}°</span>
+                    </div>
+                  ))}
             </div>
           </aside>
         </div>
